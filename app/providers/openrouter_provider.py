@@ -9,9 +9,6 @@ from app.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-# OpenRouter rejects a "models" array with more than 3 entries.
-MAX_CANDIDATE_MODELS = 3
-
 
 class OpenRouterLLMProvider(LLMProvider):
     """Calls the OpenRouter chat-completions API (OpenAI-compatible)."""
@@ -36,35 +33,45 @@ class OpenRouterLLMProvider(LLMProvider):
 
     def _candidate_models(self, model: str | None) -> list[str]:
         """The requested model first, then the configured fallbacks (deduped,
-        order preserved), capped at OpenRouter's limit for the "models" array."""
+        order preserved)."""
         candidates = [model or self._default_model]
         for fallback in self._fallback_models:
             if fallback not in candidates:
                 candidates.append(fallback)
-        return candidates[:MAX_CANDIDATE_MODELS]
+        return candidates
 
-    def _payload(
-        self,
-        prompt: str,
-        model: str | None,
-        temperature: float,
-        max_tokens: int,
-    ) -> dict[str, Any]:
-        candidates = self._candidate_models(model)
-        payload: dict[str, Any] = {
+    def _payload(self, prompt: str, model: str, temperature: float, max_tokens: int) -> dict[str, Any]:
+        return {
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
-        # OpenRouter tries each model in "models" in order server-side, falling
-        # back automatically on error/unavailability - a single model is sent
-        # as "model" since "models" requires at least one alternative to matter.
-        if len(candidates) > 1:
-            payload["models"] = candidates
-        else:
-            payload["model"] = candidates[0]
-        return payload
+
+    async def _generate_with_model(
+        self, client: httpx.AsyncClient, model: str, prompt: str, temperature: float, max_tokens: int
+    ) -> str:
+        payload = self._payload(prompt, model, temperature, max_tokens)
+        try:
+            response = await client.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload)
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise LLMProviderError(f"OpenRouter request to model '{model}' failed: {exc}") from exc
+
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMProviderError(f"OpenRouter model '{model}' returned an unexpected response shape") from exc
+
+        if not isinstance(content, str) or not content.strip():
+            # Some free models return null/empty content on a 200 (safety
+            # refusal, reasoning-only output, etc.) - not an HTTP error, so
+            # OpenRouter's own routing has no reason to pick another model.
+            raise LLMProviderError(f"OpenRouter model '{model}' returned no usable text content")
+
+        return content.strip()
 
     async def generate_text(
         self,
@@ -73,24 +80,18 @@ class OpenRouterLLMProvider(LLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 400,
     ) -> str:
-        payload = self._payload(prompt, model, temperature, max_tokens)
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    f"{self._base_url}/chat/completions",
-                    headers=self._headers(),
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
-                logger.info("OpenRouter response served by model '%s'", data.get("model", "unknown"))
-                content = data["choices"][0]["message"]["content"]
-                if not isinstance(content, str) or not content.strip():
-                    # Some free models return null/empty content (safety refusal,
-                    # reasoning-only output, etc.) instead of an HTTP error.
-                    logger.error("OpenRouter model '%s' returned no usable text content", data.get("model", "unknown"))
-                    raise LLMProviderError(f"OpenRouter model returned no usable text content: {content!r}")
-                return content.strip()
-        except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
-            logger.error("OpenRouter request failed: %s", exc)
-            raise LLMProviderError(f"OpenRouter request failed: {exc}") from exc
+        candidates = self._candidate_models(model)
+        last_error: LLMProviderError | None = None
+
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            for candidate in candidates:
+                try:
+                    text = await self._generate_with_model(client, candidate, prompt, temperature, max_tokens)
+                    logger.info("OpenRouter response served by model '%s'", candidate)
+                    return text
+                except LLMProviderError as exc:
+                    logger.warning("Candidate model '%s' failed, trying next: %s", candidate, exc)
+                    last_error = exc
+
+        logger.error("All OpenRouter candidate models failed: %s", candidates)
+        raise last_error

@@ -19,15 +19,15 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 60
 
     # Comma-separated OpenRouter model ids tried, in order, after `llm_model`,
-    # via OpenRouter's own "models" fallback array - it moves to the next one
-    # server-side on error/unavailability, so no client-side retry loop is
-    # needed here. Free models get discontinued/renamed over time, so this
-    # exists to survive any single one of them disappearing. "openrouter/free"
-    # (an auto-router across whatever free model is up) is last: it works but
+    # one request at a time (see OpenRouterLLMProvider.generate_text). A plain
+    # HTTP error moves to the next candidate; so does a 200 with null/empty
+    # content, which some free models return on a refusal or reasoning-only
+    # output - OpenRouter's own "models" fallback array does NOT retry that
+    # case, only outright request failures, so this is done client-side
+    # instead. Free models get discontinued/renamed over time, so this exists
+    # to survive any single one of them disappearing. "openrouter/free" (an
+    # auto-router across whatever free model is up) is last: it works but
     # picks an arbitrary model, so named models are tried first.
-    # OpenRouter caps the "models" array at 3 entries total (see MAX_CANDIDATE_MODELS
-    # in the OpenRouter provider), so only the first 2 fallbacks here ever matter
-    # alongside `llm_model`.
     openrouter_fallback_models: str = "minimax/minimax-m2.7:free,openrouter/free"
 
     @property
