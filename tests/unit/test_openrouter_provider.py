@@ -1,3 +1,5 @@
+import json
+
 import pytest
 import respx
 from httpx import Response
@@ -50,18 +52,75 @@ async def test_generate_text_http_error_raises_llm_provider_error(monkeypatch):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_generate_text_stream_yields_chunks(monkeypatch):
+async def test_generate_text_null_content_raises_llm_provider_error(monkeypatch):
+    """Some free models return a 200 with `content: null` (safety refusal,
+    reasoning-only output, etc.) instead of an HTTP error - this must not
+    crash with an unhandled AttributeError on `.strip()`."""
     _configure(monkeypatch)
     settings = get_settings()
-    sse_body = (
-        'data: {"choices": [{"delta": {"content": "ola "}}]}\n\n'
-        'data: {"choices": [{"delta": {"content": "mundo"}}]}\n\n'
-        "data: [DONE]\n\n"
-    )
     respx.post(f"{settings.openrouter_base_url}/chat/completions").mock(
-        return_value=Response(200, text=sse_body, headers={"content-type": "text/event-stream"})
+        return_value=Response(200, json={"choices": [{"message": {"content": None}}]})
     )
 
     provider = OpenRouterLLMProvider()
-    chunks = [chunk async for chunk in provider.generate_text_stream("prompt qualquer")]
-    assert "".join(chunks) == "ola mundo"
+    with pytest.raises(LLMProviderError):
+        await provider.generate_text("prompt qualquer")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_generate_text_sends_models_fallback_array_by_default(monkeypatch):
+    """With the default OPENROUTER_FALLBACK_MODELS configured, the primary model
+    plus its fallbacks are sent as OpenRouter's "models" array, so OpenRouter
+    itself falls back server-side if the primary is unavailable/discontinued."""
+    _configure(monkeypatch)
+    settings = get_settings()
+    route = respx.post(f"{settings.openrouter_base_url}/chat/completions").mock(
+        return_value=Response(200, json={"model": "openrouter/free", "choices": [{"message": {"content": "ok"}}]})
+    )
+
+    provider = OpenRouterLLMProvider()
+    await provider.generate_text("prompt qualquer")
+
+    body = json.loads(route.calls.last.request.content)
+    assert "model" not in body
+    assert body["models"][0] == settings.llm_model
+    assert len(body["models"]) > 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_generate_text_caps_models_array_at_openrouter_limit(monkeypatch):
+    """OpenRouter rejects a "models" array with more than 3 entries."""
+    _configure(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a,b,c,d,e")
+    get_settings.cache_clear()
+    settings = get_settings()
+    route = respx.post(f"{settings.openrouter_base_url}/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+
+    provider = OpenRouterLLMProvider()
+    await provider.generate_text("prompt qualquer")
+
+    body = json.loads(route.calls.last.request.content)
+    assert len(body["models"]) == 3
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_generate_text_sends_single_model_when_no_fallbacks_configured(monkeypatch):
+    _configure(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "")
+    get_settings.cache_clear()
+    settings = get_settings()
+    route = respx.post(f"{settings.openrouter_base_url}/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+
+    provider = OpenRouterLLMProvider()
+    await provider.generate_text("prompt qualquer")
+
+    body = json.loads(route.calls.last.request.content)
+    assert "models" not in body
+    assert body["model"] == settings.llm_model

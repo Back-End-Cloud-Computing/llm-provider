@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
 
 
 class LLMProvider(ABC):
@@ -23,15 +22,3 @@ class LLMProvider(ABC):
         max_tokens: int = 400,
     ) -> str:
         """Generate text from a prompt. Must raise LLMProviderError on failure."""
-
-    @abstractmethod
-    async def generate_text_stream(
-        self,
-        prompt: str,
-        model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 400,
-    ) -> AsyncGenerator[str, None]:
-        """Stream text chunks for a prompt. Must raise LLMProviderError on failure."""
-        if False:  # pragma: no cover - makes this an async generator for type checkers
-            yield ""
