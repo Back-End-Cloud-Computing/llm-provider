@@ -1,0 +1,24 @@
+# Entrada HTTP externa para o llm-provider.
+#
+# Mesmo padrão do authorization/k8s/ingress.yaml: roteamento por HOST (não por
+# path), então /generate, /docs, /health etc. continuam funcionando sem
+# prefixo, do jeito que o código já espera.
+#
+# O Ingress aponta para o SERVICE, nunca para um Pod.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: llm-provider-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: llm-provider.ganjj.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: llm-provider
+                port:
+                  number: 8004

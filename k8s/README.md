@@ -78,6 +78,31 @@ kubectl apply -f k8s/llm-provider.yaml
 kubectl port-forward service/llm-provider 8004:8004
 ```
 
+## Acessar via Ingress (sem port-forward por serviço)
+
+```bash
+minikube addons enable ingress
+kubectl apply -f k8s/ingress.yaml
+kubectl wait --namespace ingress-nginx --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller --timeout=120s
+```
+
+```bash
+IP=$(minikube ip)
+PORT=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
+curl -H "Host: llm-provider.ganjj.local" http://$IP:$PORT/docs
+```
+
+**No WSL2**: encaminhe uma porta só, para o Ingress Controller (não para o
+`llm-provider` diretamente):
+
+```bash
+kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 8080:80
+```
+
+Hosts do Windows: `127.0.0.1  llm-provider.ganjj.local`. Navegador:
+http://llm-provider.ganjj.local:8080/docs
+
 ## Sobre a imagem
 
 Publicada em
