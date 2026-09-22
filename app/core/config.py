@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
 
+    auth_service_base_url: str = "http://localhost:8081"
+
     llm_provider: str = "mock"
     llm_model: str = "google/gemma-4-26b-a4b-it:free"
     openrouter_api_key: str | None = None
