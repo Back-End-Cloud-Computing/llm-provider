@@ -1,0 +1,11 @@
+services:
+  llm-provider:
+    build: ./llm-provider
+    container_name: llm-provider
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    env_file:
+      - ./llm-provider/.env
+    networks:
+      - ganjj-net
