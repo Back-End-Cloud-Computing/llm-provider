@@ -1,0 +1,70 @@
+# llm-provider no Kubernetes.
+#
+# Troque "joao2006" pela sua conta do Docker Hub se for publicar sob outra,
+# ou use a imagem local se o cluster compartilhar o daemon do Docker (caso do
+# OrbStack/minikube com driver docker).
+#
+# LLM_PROVIDER=mock evita depender de uma OPENROUTER_API_KEY (e de um Secret
+# para guarda-la) so para a demonstracao. Para usar o OpenRouter de verdade,
+# crie um Secret com a chave e troque LLM_PROVIDER para "openrouter", com a
+# chave vindo de secretKeyRef em vez de value.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-provider
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: llm-provider
+  template:
+    metadata:
+      labels:
+        app: llm-provider
+    spec:
+      containers:
+        - name: llm-provider
+          image: joao2006/llm-provider:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8004
+          env:
+            - name: LLM_PROVIDER
+              value: mock
+            - name: AUTH_SERVICE_BASE_URL
+              value: http://authorization:8081
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+---
+# Endereco estavel do llm-provider. product-service chama
+# "http://llm-provider:8004" e nunca precisa saber quantos Pods existem.
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-provider
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-provider
+  ports:
+    - port: 8004
+      targetPort: 8004
