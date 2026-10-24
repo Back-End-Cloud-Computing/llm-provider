@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: llm-provider
-          image: joao2006/llm-provider:1.0.0
+          image: joao2006/llm-provider:1.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8004
