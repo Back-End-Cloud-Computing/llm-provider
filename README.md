@@ -33,6 +33,23 @@ python3 -m venv .venv
 
 Swagger em `http://localhost:8004/docs`.
 
+## Rodando com Docker
+
+A partir de um clone isolado deste repositório:
+
+```bash
+cp .env.example .env   # LLM_PROVIDER=openrouter e OPENROUTER_API_KEY para LLM real
+docker compose up -d
+```
+
+O `docker-compose.yml` constrói o llm-provider do código local e sobe o
+`authorization` (+ Oracle, construído direto do repositório no GitHub), que
+emite os tokens. O primeiro `up` leva alguns minutos: o Oracle precisa
+inicializar e o `authorization` é compilado.
+
+- API: `http://localhost:8004`
+- Tokens: `POST http://localhost:8081/auth/login` (admin padrão `admin@ganjj.com` / `adminSegura123`)
+
 ## Testes
 
 ```bash

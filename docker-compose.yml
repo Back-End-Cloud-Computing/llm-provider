@@ -1,11 +1,69 @@
+# Sobe o llm-provider com o que ele precisa, a partir de um clone isolado
+# deste repositório:
+#
+#   cp .env.example .env      # LLM_PROVIDER=openrouter + OPENROUTER_API_KEY para LLM real
+#   docker compose up -d
+#
+# O llm-provider é construído do código local. O authorization (que emite e
+# assina os tokens) é construído direto do repositório no GitHub, porque a
+# imagem publicada dele só existe para arm64; sem JWT_*_KEY_PATH ele gera um
+# par RSA temporário a cada subida (só para desenvolvimento).
+
 services:
   llm-provider:
-    build: ./llm-provider
-    container_name: llm-provider
+    build: .
     restart: unless-stopped
     ports:
       - "8004:8004"
     env_file:
-      - ./llm-provider/.env
-    networks:
-      - ganjj-net
+      - .env
+    depends_on:
+      authorization:
+        condition: service_healthy
+
+  # --- authorization: emite os tokens (login em http://localhost:8081) ---
+  oracle-auth:
+    image: gvenzl/oracle-free:23-slim
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: ganjj_auth
+      APP_USER_PASSWORD: ganjj_auth
+    volumes:
+      - oracle_auth_data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  authorization:
+    build: https://github.com/Back-End-Cloud-Computing/authorization.git#main
+    restart: unless-stopped
+    depends_on:
+      oracle-auth:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      DB_HOST: oracle-auth
+      DB_PORT: 1521
+      DB_NAME: FREEPDB1
+      DB_USER: ganjj_auth
+      DB_PASSWORD: ganjj_auth
+      JPA_DDL_AUTO: update
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ganjj.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-adminSegura123}
+    ports:
+      - "8081:8081"
+    healthcheck:
+      # A imagem não tem curl: faz o GET pelo /dev/tcp do bash e só considera
+      # pronto quando /auth/public-key responde 200.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /auth/public-key HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  oracle_auth_data:
