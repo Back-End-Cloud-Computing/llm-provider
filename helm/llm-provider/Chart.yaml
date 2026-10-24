@@ -1,0 +1,6 @@
+apiVersion: v2
+name: llm-provider
+description: Acesso a LLM do GANJJ (FastAPI + OpenRouter, com fallback mock), serviço interno sem Ingress
+type: application
+version: 0.1.0
+appVersion: "1.1.0"

@@ -1,0 +1,5 @@
+O llm-provider busca a chave pública no authorization ao subir: instale-o antes.
+Provedor: {{ .Values.config.LLM_PROVIDER }}{{ if eq .Values.config.LLM_PROVIDER "openrouter" }} (a OPENROUTER_API_KEY vem do Secret {{ .Values.existingSecret }}){{ end }}.
+Serviço interno, sem Ingress. Teste:
+  kubectl port-forward svc/llm-provider 8004:8004
+  curl localhost:8004/health

@@ -1,0 +1,52 @@
+{{- $image := printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-provider
+  labels:
+    app: llm-provider
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: llm-provider
+  template:
+    metadata:
+      labels:
+        app: llm-provider
+      annotations:
+        # O ConfigMap muda => novo hash => os pods reiniciam com a config nova.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: llm-provider
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: llm-provider-config
+            {{- if .Values.existingSecret }}
+            # optional: sem o Secret o pod sobe mesmo assim (modo mock).
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+                optional: true
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,27 @@
+image:
+  repository: joao2006/llm-provider
+  tag: ""            # vazio usa o appVersion do Chart.yaml
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+# Secret criado fora do chart (kubectl create secret, ver README do chart).
+# Chave esperada: OPENROUTER_API_KEY. É opcional: sem ele o pod sobe e, com
+# config.LLM_PROVIDER=mock, responde pelo provedor offline.
+existingSecret: llm-provider-secrets
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Variáveis não sensíveis. Para LLM real: LLM_PROVIDER=openrouter e o Secret
+# acima com a OPENROUTER_API_KEY.
+config:
+  APP_ENV: production
+  LOG_LEVEL: INFO
+  AUTH_SERVICE_BASE_URL: http://authorization:8081
+  LLM_PROVIDER: mock

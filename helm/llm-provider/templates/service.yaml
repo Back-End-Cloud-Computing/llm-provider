@@ -1,0 +1,12 @@
+# Só ClusterIP: o product chama llm-provider:8004 de dentro do cluster. Sem Ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-provider
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-provider
+  ports:
+    - port: 8004
+      targetPort: 8004
