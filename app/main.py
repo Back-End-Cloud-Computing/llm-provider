@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, LLMProviderError
@@ -39,6 +40,13 @@ def create_app() -> FastAPI:
     @application.exception_handler(LLMProviderError)
     async def llm_provider_error_handler(request: Request, exc: LLMProviderError) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(exc), "error_type": "llm_provider_error"})
+
+    # Request count, error rate and latency per route, scraped by Prometheus.
+    # Mounted on the app itself (not the JWT-protected router) and never
+    # exposed outside the cluster: this service has no Ingress.
+    Instrumentator(excluded_handlers=["/metrics"]).instrument(application).expose(
+        application, include_in_schema=False
+    )
 
     @application.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:

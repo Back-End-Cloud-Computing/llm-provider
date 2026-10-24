@@ -22,6 +22,11 @@ spec:
     metadata:
       labels:
         app: llm-provider
+      # Prometheus descobre o pod por estas anotacoes e raspa /metrics direto nele.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: llm-provider

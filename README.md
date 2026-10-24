@@ -10,6 +10,8 @@ desenvolvimento e testes.
 - `WS /generate/ws`: mesma geração, mas transmitindo a resposta em pedaços
   (streaming), usada exclusivamente pelo fluxo de geração de descrição do
   `product-service`.
+- `GET /metrics`: métricas Prometheus (requisições, erros e latência por rota);
+  sem token e sem rota fora do cluster.
 
 **Este serviço não contém nenhum prompt de negócio.** Quem quiser gerar uma
 descrição de produto, decidir uma estratégia de busca, etc., monta o prompt
