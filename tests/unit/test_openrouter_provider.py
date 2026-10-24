@@ -136,6 +136,70 @@ async def test_generate_text_falls_back_to_next_model_on_empty_content(monkeypat
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_generate_text_disables_reasoning_by_default(monkeypatch):
+    """Free reasoning models spend the whole max_tokens budget thinking and
+    come back with empty content (finish_reason=length) unless reasoning is
+    turned off in the request."""
+    _configure(monkeypatch)
+    route = respx.post(f"{get_settings().openrouter_base_url}/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+
+    provider = OpenRouterLLMProvider()
+    await provider.generate_text("prompt qualquer")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["reasoning"] == {"enabled": False}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_generate_text_keeps_reasoning_when_disabled_by_config(monkeypatch):
+    _configure(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_DISABLE_REASONING", "false")
+    get_settings.cache_clear()
+    route = respx.post(f"{get_settings().openrouter_base_url}/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+
+    provider = OpenRouterLLMProvider()
+    await provider.generate_text("prompt qualquer")
+
+    body = json.loads(route.calls.last.request.content)
+    assert "reasoning" not in body
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_generate_text_retries_same_model_with_reasoning_when_it_is_mandatory(monkeypatch):
+    """Some endpoints (e.g. what openrouter/free routes to) reject a request
+    with reasoning disabled - the same model is retried without the flag
+    instead of being skipped."""
+    _configure(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "")
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    route = respx.post(f"{settings.openrouter_base_url}/chat/completions")
+    route.side_effect = [
+        Response(400, json={"error": {"message": "Reasoning is mandatory for this endpoint and cannot be disabled."}}),
+        Response(200, json={"choices": [{"message": {"content": "resposta com raciocinio"}}]}),
+    ]
+
+    provider = OpenRouterLLMProvider()
+    text = await provider.generate_text("prompt qualquer")
+
+    assert text == "resposta com raciocinio"
+    assert route.call_count == 2
+    first_body = json.loads(route.calls[0].request.content)
+    second_body = json.loads(route.calls[1].request.content)
+    assert first_body["reasoning"] == {"enabled": False}
+    assert "reasoning" not in second_body
+    assert second_body["model"] == settings.llm_model
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_generate_text_raises_after_every_candidate_fails(monkeypatch):
     _configure(monkeypatch)
     monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "fallback-model")

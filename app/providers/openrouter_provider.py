@@ -24,6 +24,7 @@ class OpenRouterLLMProvider(LLMProvider):
         self._base_url = settings.openrouter_base_url
         self._api_key = settings.openrouter_api_key
         self._timeout = settings.llm_timeout_seconds
+        self._disable_reasoning = settings.openrouter_disable_reasoning
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -40,21 +41,34 @@ class OpenRouterLLMProvider(LLMProvider):
                 candidates.append(fallback)
         return candidates
 
-    def _payload(self, prompt: str, model: str, temperature: float, max_tokens: int) -> dict[str, Any]:
-        return {
+    def _payload(
+        self, prompt: str, model: str, temperature: float, max_tokens: int, disable_reasoning: bool
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if disable_reasoning:
+            payload["reasoning"] = {"enabled": False}
+        return payload
+
+    @staticmethod
+    def _reasoning_is_mandatory(response: httpx.Response) -> bool:
+        return response.status_code == 400 and "reasoning is mandatory" in response.text.lower()
 
     async def _generate_with_model(
         self, client: httpx.AsyncClient, model: str, prompt: str, temperature: float, max_tokens: int
     ) -> str:
-        payload = self._payload(prompt, model, temperature, max_tokens)
+        url = f"{self._base_url}/chat/completions"
         try:
-            response = await client.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload)
+            payload = self._payload(prompt, model, temperature, max_tokens, self._disable_reasoning)
+            response = await client.post(url, headers=self._headers(), json=payload)
+            if self._disable_reasoning and self._reasoning_is_mandatory(response):
+                payload = self._payload(prompt, model, temperature, max_tokens, disable_reasoning=False)
+                response = await client.post(url, headers=self._headers(), json=payload)
             response.raise_for_status()
             data = response.json()
         except (httpx.HTTPError, ValueError) as exc:

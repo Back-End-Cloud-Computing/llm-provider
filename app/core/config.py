@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     auth_service_base_url: str = "http://localhost:8081"
 
     llm_provider: str = "mock"
-    llm_model: str = "google/gemma-4-26b-a4b-it:free"
+    llm_model: str = "nvidia/nemotron-3.5-lightning:free"
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_timeout_seconds: int = 60
@@ -30,7 +30,14 @@ class Settings(BaseSettings):
     # to survive any single one of them disappearing. "openrouter/free" (an
     # auto-router across whatever free model is up) is last: it works but
     # picks an arbitrary model, so named models are tried first.
-    openrouter_fallback_models: str = "minimax/minimax-m2.7:free,openrouter/free"
+    openrouter_fallback_models: str = (
+        "nvidia/nemotron-3.5-super-vl:free,"
+        "nvidia/nemotron-3-ultra-550b-a55b:free,"
+        "dots-studio/dots-3-note-preview:free,"
+        "openrouter/free"
+    )
+
+    openrouter_disable_reasoning: bool = True
 
     @property
     def openrouter_fallback_model_list(self) -> list[str]:
