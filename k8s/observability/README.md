@@ -1,6 +1,6 @@
 # Dashboard Grafana — `llm-provider`
 
-[`llm-provider-dashboard.json`](llm-provider-dashboard.json): requisições, erros e latência do llm-provider, a partir do
+[`dashboard.json`](dashboard.json): requisições, erros e latência do llm-provider, a partir do
 `/metrics` (`prometheus-fastapi-instrumentator`). Mesmo layout dos dashboards dos outros serviços do GANJJ.
 
 | Painel | O que mostra |
@@ -11,9 +11,13 @@
 | Latência (p50, p95, p99) e p95 por rota | Com OpenRouter, a latência é quase toda do modelo externo, não do serviço |
 | Taxa de erro 5xx por rota | Qual rota está falhando |
 
-## Importar
+## Carregar
 
-Grafana → **Dashboards → New → Import** → enviar o JSON. Não precisa editar nada:
+No cluster da solução entra sozinho: o `k8s/observability/install.sh` do `api-gateway` carrega todo
+`<repo>/k8s/observability/dashboard.json` dos repos clonados ao lado dele (ConfigMap com o label `grafana_dashboard=1`,
+lido pelo sidecar do Grafana). Por isso o arquivo tem esse nome e fica nesta pasta.
+
+Fora desse cluster: Grafana → **Dashboards → New → Import** → enviar o JSON. Não precisa editar nada:
 
 - **Prometheus** (variável `datasource`): escolha o datasource no topo do painel.
 - **Filtro** (variável `filtro`, padrão `app="llm-provider"`): seletor que identifica os pods do llm-provider. É o label
