@@ -4,10 +4,10 @@
 # ou use a imagem local se o cluster compartilhar o daemon do Docker (caso do
 # OrbStack/minikube com driver docker).
 #
-# LLM_PROVIDER=mock evita depender de uma OPENROUTER_API_KEY (e de um Secret
-# para guarda-la) so para a demonstracao. Para usar o OpenRouter de verdade,
-# crie um Secret com a chave e troque LLM_PROVIDER para "openrouter", com a
-# chave vindo de secretKeyRef em vez de value.
+# LLM_PROVIDER=openrouter com a chave vinda do Secret llm-provider-secrets
+# (criado fora do git, ver k8s/README.md). O secretKeyRef e opcional: sem o
+# Secret o pod sobe do mesmo jeito e o servico cai para o provedor mock, entao
+# aplicar este arquivo nunca derruba o cluster de quem ainda nao tem a chave.
 
 apiVersion: apps/v1
 kind: Deployment
@@ -36,7 +36,13 @@ spec:
             - containerPort: 8004
           env:
             - name: LLM_PROVIDER
-              value: mock
+              value: openrouter
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-provider-secrets
+                  key: OPENROUTER_API_KEY
+                  optional: true
             - name: AUTH_SERVICE_BASE_URL
               value: http://authorization:8081
           readinessProbe:

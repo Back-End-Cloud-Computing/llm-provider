@@ -22,11 +22,29 @@ Service llm-provider :8004
 
 ## Subir
 
-Depende de `authorization` já estar no cluster (repositório próprio):
+Depende de `authorization` já estar no cluster (repositório próprio).
+
+A chave do OpenRouter vai num Secret, nunca no git. Sem ele o pod sobe e
+responde pelo provedor `mock` (resposta offline); com ele, pelo OpenRouter:
 
 ```bash
+# lê a chave sem ecoar nada no terminal nem no histórico
+read -rs -p 'OPENROUTER_API_KEY: ' KEY; echo
+kubectl create secret generic llm-provider-secrets --from-literal=OPENROUTER_API_KEY="$KEY"
+unset KEY
+
 kubectl apply -f k8s/llm-provider.yaml
 ```
+
+Criou ou trocou o Secret com os pods já no ar? A variável só é lida quando o
+container sobe:
+
+```bash
+kubectl rollout restart deployment/llm-provider
+```
+
+Para conferir qual provedor respondeu, olhe o campo `provider` da resposta do
+`/generate` (`openrouter` ou `mock`).
 
 ```bash
 kubectl wait --for=condition=ready pod -l app=llm-provider --timeout=120s
@@ -49,7 +67,7 @@ T=$(curl -s -X POST http://authorization:8081/auth/login \
   -d '{"email":"admin@ganjj.com","password":"adminSegura123"}' \
   | sed 's/.*"accessToken":"\([^"]*\)".*/\1/')
 
-# com token: 200 (modo mock, resposta offline sem chamar API externa)
+# com token: 200 (openrouter com o Secret; mock, offline, sem ele)
 curl -s -X POST http://llm-provider:8004/generate \
   -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
   -d '{"prompt":"teste"}'

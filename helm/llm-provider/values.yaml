@@ -18,10 +18,10 @@ resources:
     cpu: 500m
     memory: 256Mi
 
-# Variáveis não sensíveis. Para LLM real: LLM_PROVIDER=openrouter e o Secret
-# acima com a OPENROUTER_API_KEY.
+# Variáveis não sensíveis. openrouter usa a OPENROUTER_API_KEY do Secret acima;
+# sem o Secret o serviço cai sozinho para o mock.
 config:
   APP_ENV: production
   LOG_LEVEL: INFO
   AUTH_SERVICE_BASE_URL: http://authorization:8081
-  LLM_PROVIDER: mock
+  LLM_PROVIDER: openrouter
